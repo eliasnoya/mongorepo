@@ -21,7 +21,7 @@ type EntityTest struct {
 client, _ := mongo.Connect(context.TODO(), options.Client().ApplyURI("mongodb://localhost:27017"))
 
 // Example defining all fields
-repo := repository.NewRepository[EntityTest](&repository.RepositoryConfig{
+repo := mongorepo.NewRepository[EntityTest](&mongorepo.RepositoryConfig{
     Collection:     client.Database("test_db").Collection("entity_test"),
     IdField:        "ID",
     CreatedAtField: "CreatedAt",
@@ -30,7 +30,7 @@ repo := repository.NewRepository[EntityTest](&repository.RepositoryConfig{
 })
 
 // using defaults ID, DeletedAt, CreatedAt, UpdatedAt
-repo := repository.NewRepository[EntityTest](&repository.RepositoryConfig{
+repo := mongorepo.NewRepository[EntityTest](&mongorepo.RepositoryConfig{
     Collection: client.Database("test_db").Collection("entity_test"),
 })
 ```
@@ -71,15 +71,15 @@ entities := repo.Find(bson.M{}, &options.FindOptions{Sort: bson.M{"created_at": 
 ## Using your own implementations (ready for testing)
 
 ```go
-// To define a repository for your entity type, extend the generic IRepository interface provided by the base repository. 
+// To define a repository for your entity type, extend the generic IRepository interface provided by the base mongorepo. 
 // Here’s how to set up and use your custom repository:
 type MyEntityRepository struct {
-	repository.IRepository[EntityTest]
+	mongorepo.IRepository[EntityTest]
 }
 
 // Create a constructor function for your repository that accepts an IRepository[T] instance. 
 // This allows you to initialize your custom repository with the generic repository functionality.
-func NewMyEntityRepository(repository repository.IRepository[EntityTest]) *MyEntityRepository {
+func NewMyEntityRepository(repository mongorepo.IRepository[EntityTest]) *MyEntityRepository {
 	return &MyEntityRepository{
 		IRepository: repository,
 	}
@@ -92,13 +92,13 @@ func (m *MyEntityRepository) All() []*EntityTest {
 
 // Instantiate your custom repository by passing a generic Repository[T] implementation. 
 // Here’s how you can set it up and use it:
-myRepository := NewMyEntityRepository(repository.NewRepository[EntityTest](&repository.RepositoryConfig{
+myRepository := NewMyEntityRepository(mongorepo.NewRepository[EntityTest](&mongorepo.RepositoryConfig{
     Collection: client.Database("test_db").Collection("entity_test"),
 }))
 
 // Use your functions
-records := myRepository.All() // loop your EntityTest slice
+records := mymongorepo.All() // loop your EntityTest slice
 
 // Use generic functions
-entityOne := myRepository.FindOne(bson.M{"name": "Elías"})
+entityOne := mymongorepo.FindOne(bson.M{"name": "Elías"})
 ```
