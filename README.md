@@ -58,29 +58,40 @@ type EntityTest struct {
 	ID        primitive.ObjectID `bson:"_id"`
 	CreatedAt time.Time          `bson:"created_at"`
 	UpdatedAt time.Time          `bson:"updated_at,omitempty"`
-	DeletedAt time.Time          `bson:"deleted_at,omitempty"`
+	DeletedAt time.Time          `bson:"deleted_at,omitempty"` // Important!! dont forget omitempty for entities with softdeletes
 	Name      string             `bson:"name"`
 }
 ```
 
-## Using the generic Repository:
+## Using the go-generic repository:
 
 ```go
 // Instance your mongo client
 client, _ := mongo.Connect(context.TODO(), options.Client().ApplyURI("mongodb://localhost:27017"))
 
-// Example defining all fields
-repo := mongorepo.New[EntityTest](&mongorepo.Config{
-    Collection:     client.Database("test_db").Collection("entity_test"),
-    IdField:        "ID",
-    CreatedAtField: "CreatedAt",
-    UpdatedAtField: "UpdatedAt",
-    DeletedAtField: "DeletedAt" // if is set this empty "" Delete(entity) will hard delete the document
-})
+// using defaults ID, DeletedAt, CreatedAt, UpdatedAt and Context
+repo := mongorepo.NewDefault[EntityTest](client.Database("example_db").Collection("entity_test"))
 
-// using defaults ID, DeletedAt, CreatedAt, UpdatedAt
+// if name: Jon exists will return an EntityTest with all the mongo document data or nil
+// REMEMBER the repo will not exclude automatically when a document is softDeleted with DeletedAtField,
+// if you want only non-deleted records add in the query for this example:
+// bson.M{"name": "Jon", "deleted_at": bson.M{"$exists": false}}
+entity := repo.FindOne(bson.M{"name": "Jon"}) 
+
+if entity == nil {
+	return "Document not found"
+}
+```
+
+## Using custom Config:
+```go
 repo := mongorepo.New[EntityTest](&mongorepo.Config{
-    Collection: client.Database("test_db").Collection("entity_test"),
+    Collection:     client.Database("example_db").Collection("entity_test"),
+	Context: 		context.TODO(), // default context.Background()
+    IdField:        "MyID", 		// default ID
+    CreatedAtField: "MyCreatedAt", 	// default CreatedAt
+    UpdatedAtField: "MyUpdatedAt", 	// default UpdatedAt
+    DeletedAtField: "MyDeletedAt" 	// default "" (if is empty will hard-delete the documents, if is set to a time.Time field will update that)
 })
 ```
 
@@ -142,7 +153,7 @@ func (m *MyEntityRepository) All() []*EntityTest {
 // Instantiate your custom repository by passing a generic Repository[T] implementation. 
 // Here’s how you can set it up and use it:
 myRepository := NewMyEntityRepository(mongorepo.New[EntityTest](&mongorepo.Config{
-    Collection: client.Database("test_db").Collection("entity_test"),
+    Collection: client.Database("example_db").Collection("entity_test"),
 }))
 
 // Use your functions

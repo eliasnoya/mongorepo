@@ -20,6 +20,12 @@ type Repository[T any] struct {
 	config *Config
 }
 
+func NewDefault[T any](collection *mongo.Collection) *Repository[T] {
+	return New[T](&Config{
+		Collection: collection,
+	})
+}
+
 // NewRepository initializes a new Repository instance for the specified collection and configuration.
 // It also sets default field names for the ID, CreatedAt, and UpdatedAt fields if not provided.
 func New[T any](config *Config) *Repository[T] {
@@ -37,6 +43,10 @@ func New[T any](config *Config) *Repository[T] {
 
 	if config.Context == nil {
 		config.Context = context.Background()
+	}
+
+	if config.Collection == nil {
+		panic("Configuration error: The *mongo.Collection in the Collection property of mongorepo.Config is not set.")
 	}
 
 	return &Repository[T]{config: config}
@@ -110,6 +120,7 @@ func (r *Repository[T]) FindById(id primitive.ObjectID) *T {
 // Returns nil if no document is found or if an error occurs during retrieval.
 func (r *Repository[T]) FindOne(query bson.M, opts ...*options.FindOneOptions) *T {
 	var entity T
+
 	err := r.collection().FindOne(r.config.Context, query, opts...).Decode(&entity)
 
 	if err != nil {
