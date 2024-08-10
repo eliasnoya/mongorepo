@@ -2,6 +2,55 @@
 
 Is a library for use generic Repository based on Entities (structs) with bson definition
 
+## Install:
+
+```bash
+go get github.com/eliasnoya/mongorepo
+```
+
+mongorepo includes go.mongodb.org/mongo-driver an all his dependencies
+
+## main.go Example
+
+```go
+package main
+
+import (
+	"context"
+	"time"
+
+	"github.com/eliasnoya/mongorepo"
+	"go.mongodb.org/mongo-driver/bson/primitive"
+	"go.mongodb.org/mongo-driver/mongo"
+	"go.mongodb.org/mongo-driver/mongo/options"
+)
+
+type EntityTest struct {
+	ID        primitive.ObjectID `bson:"_id"`
+	CreatedAt time.Time          `bson:"created_at"`
+	UpdatedAt time.Time          `bson:"updated_at,omitempty"`
+	DeletedAt time.Time          `bson:"deleted_at,omitempty"`
+	Name      string             `bson:"name"`
+}
+
+func main() {
+
+	client, err := mongo.Connect(context.TODO(), options.Client().ApplyURI("mongodb://localhost:27017"))
+	if err != nil {
+		panic("failed to connect mongo db")
+	}
+
+	repo := mongorepo.NewRepository[EntityTest](&mongorepo.RepositoryConfig{
+		Collection: client.Database("sarasa").Collection("entity_test"),
+	})
+
+	repo.Create(&EntityTest{
+		Name: "Elias Noya",
+	})
+}
+```
+
+
 ## Example Entity:
 
 ```go
