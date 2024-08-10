@@ -26,12 +26,19 @@ func New[T any](config *Config) *Repository[T] {
 	if config.IdField == "" {
 		config.IdField = "ID"
 	}
+
 	if config.CreatedAtField == "" {
 		config.CreatedAtField = "CreatedAt"
 	}
+
 	if config.UpdatedAtField == "" {
 		config.UpdatedAtField = "UpdatedAt"
 	}
+
+	if config.Context == nil {
+		config.Context = context.Background()
+	}
+
 	return &Repository[T]{config: config}
 }
 
@@ -103,7 +110,7 @@ func (r *Repository[T]) FindById(id primitive.ObjectID) *T {
 // Returns nil if no document is found or if an error occurs during retrieval.
 func (r *Repository[T]) FindOne(query bson.M, opts ...*options.FindOneOptions) *T {
 	var entity T
-	err := r.collection().FindOne(context.Background(), query, opts...).Decode(&entity)
+	err := r.collection().FindOne(r.config.Context, query, opts...).Decode(&entity)
 
 	if err != nil {
 		log.Printf("FindOne error: %s", err.Error())
@@ -118,13 +125,13 @@ func (r *Repository[T]) FindOne(query bson.M, opts ...*options.FindOneOptions) *
 func (r *Repository[T]) Find(query bson.M, opts ...*options.FindOptions) []*T {
 	var entities []*T
 
-	cursor, err := r.collection().Find(context.Background(), query, opts...)
+	cursor, err := r.collection().Find(r.config.Context, query, opts...)
 	if err != nil {
 		log.Printf("Find error: %s", err.Error())
 		return nil
 	}
 
-	if err := cursor.All(context.Background(), &entities); err != nil {
+	if err := cursor.All(r.config.Context, &entities); err != nil {
 		log.Printf("Find cursor error: %s", err.Error())
 		return nil
 	}
@@ -140,7 +147,7 @@ func (r *Repository[T]) Create(entity *T) error {
 	}
 	r.setEntityTimestamp(entity, r.config.CreatedAtField)
 
-	_, err := r.collection().InsertOne(context.Background(), entity)
+	_, err := r.collection().InsertOne(r.config.Context, entity)
 	return err
 }
 
@@ -149,7 +156,7 @@ func (r *Repository[T]) Create(entity *T) error {
 func (r *Repository[T]) Update(entity *T) error {
 	r.setEntityTimestamp(entity, r.config.UpdatedAtField)
 
-	_, err := r.collection().UpdateByID(context.Background(), r.getEntityObjectID(entity), bson.M{"$set": entity})
+	_, err := r.collection().UpdateByID(r.config.Context, r.getEntityObjectID(entity), bson.M{"$set": entity})
 	return err
 }
 
@@ -161,6 +168,6 @@ func (r *Repository[T]) Delete(entity *T) error {
 		return r.Update(entity)
 	}
 
-	_, err := r.collection().DeleteOne(context.Background(), bson.M{"_id": r.getEntityObjectID(entity)})
+	_, err := r.collection().DeleteOne(r.config.Context, bson.M{"_id": r.getEntityObjectID(entity)})
 	return err
 }
