@@ -117,7 +117,7 @@ entity := repo.FindOne(bson.M{
 entities := repo.Find(bson.M{}, &options.FindOptions{Sort: bson.M{"created_at": -1}})
 ```
 
-## Using your own implementations (ready for testing)
+## Using your own implementations
 
 ```go
 // To define a repository for your entity type, extend the generic IRepository interface provided by the base mongorepo. 
