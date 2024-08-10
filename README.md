@@ -40,7 +40,7 @@ func main() {
 		panic("failed to connect mongo db")
 	}
 
-	repo := mongorepo.NewRepository[EntityTest](&mongorepo.RepositoryConfig{
+	repo := mongorepo.New[EntityTest](&mongorepo.Config{
 		Collection: client.Database("sarasa").Collection("entity_test"),
 	})
 
@@ -70,7 +70,7 @@ type EntityTest struct {
 client, _ := mongo.Connect(context.TODO(), options.Client().ApplyURI("mongodb://localhost:27017"))
 
 // Example defining all fields
-repo := mongorepo.NewRepository[EntityTest](&mongorepo.RepositoryConfig{
+repo := mongorepo.New[EntityTest](&mongorepo.Config{
     Collection:     client.Database("test_db").Collection("entity_test"),
     IdField:        "ID",
     CreatedAtField: "CreatedAt",
@@ -79,7 +79,7 @@ repo := mongorepo.NewRepository[EntityTest](&mongorepo.RepositoryConfig{
 })
 
 // using defaults ID, DeletedAt, CreatedAt, UpdatedAt
-repo := mongorepo.NewRepository[EntityTest](&mongorepo.RepositoryConfig{
+repo := mongorepo.New[EntityTest](&mongorepo.Config{
     Collection: client.Database("test_db").Collection("entity_test"),
 })
 ```
@@ -141,7 +141,7 @@ func (m *MyEntityRepository) All() []*EntityTest {
 
 // Instantiate your custom repository by passing a generic Repository[T] implementation. 
 // Here’s how you can set it up and use it:
-myRepository := NewMyEntityRepository(mongorepo.NewRepository[EntityTest](&mongorepo.RepositoryConfig{
+myRepository := NewMyEntityRepository(mongorepo.New[EntityTest](&mongorepo.Config{
     Collection: client.Database("test_db").Collection("entity_test"),
 }))
 

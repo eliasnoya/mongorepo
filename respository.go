@@ -17,12 +17,12 @@ import (
 // Repository provides a generic implementation for data access operations on a specific type `T`.
 // It leverages MongoDB as the underlying database and uses reflection for dynamic field access.
 type Repository[T any] struct {
-	config *RepositoryConfig
+	config *Config
 }
 
 // NewRepository initializes a new Repository instance for the specified collection and configuration.
 // It also sets default field names for the ID, CreatedAt, and UpdatedAt fields if not provided.
-func NewRepository[T any](config *RepositoryConfig) *Repository[T] {
+func New[T any](config *Config) *Repository[T] {
 	if config.IdField == "" {
 		config.IdField = "ID"
 	}

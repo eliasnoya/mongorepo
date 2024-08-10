@@ -2,7 +2,7 @@ package mongorepo
 
 import "go.mongodb.org/mongo-driver/mongo"
 
-type RepositoryConfig struct {
+type Config struct {
 	Collection     *mongo.Collection
 	IdField        string
 	DeletedAtField string
