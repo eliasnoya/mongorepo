@@ -165,9 +165,11 @@ func NewMyEntityRepository(repository mongorepo.IRepository[EntityTest]) *MyEnti
 	}
 }
 
-// You can add custom methods to your repository to extend its functionality. For example, you might want to retrieve all entities sorted by a specific field:
-func (m *MyEntityRepository) All() []*EntityTest {
-	return m.Find(bson.M{}, &options.FindOptions{Sort: bson.M{"created_at": -1}})
+// You can add custom methods to your repository to extend its functionality. 
+// For example, you might want to make your custom query with *mongo.Collection
+func (m *MyEntityRepository) MyAggregate() []*EntityTest {
+	// or m.collection().... access mongo collection and do staff
+	m.Collection().Aggregate(/* your aggregate logic */)
 }
 
 // Instantiate your custom repository by passing a generic Repository[T] implementation. 

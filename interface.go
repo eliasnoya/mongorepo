@@ -3,6 +3,7 @@ package mongorepo
 import (
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/bson/primitive"
+	"go.mongodb.org/mongo-driver/mongo"
 	"go.mongodb.org/mongo-driver/mongo/options"
 )
 
@@ -10,6 +11,9 @@ import (
 // This interface supports common CRUD operations (Create, Read, Update, Delete) for entities
 // of type `T`, where `T` can be any struct representing a MongoDB document.
 type IRepository[T any] interface {
+	// Access the repository mongo.Collection ptr
+	Collection() *mongo.Collection
+
 	// FindById retrieves a single entity by its unique MongoDB ObjectID.
 	//
 	// Parameters:

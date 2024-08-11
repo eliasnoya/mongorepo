@@ -18,16 +18,16 @@ type Repository[T any] struct {
 }
 
 // NewDefault initializes a new Repository instance with default configuration settings
-// for a given MongoDB collection.
+// for a given MongoDB Collection.
 //
 // Parameters:
-//   - collection: A pointer to the MongoDB collection where the entities of type `T` are stored.
+//   - Collection: A pointer to the MongoDB Collection where the entities of type `T` are stored.
 //
 // Returns:
 //   - A pointer to a newly created Repository instance.
-func NewDefault[T any](collection *mongo.Collection) *Repository[T] {
+func NewDefault[T any](Collection *mongo.Collection) *Repository[T] {
 	return New[T](&Config{
-		Collection:     collection,
+		Collection:     Collection,
 		IdField:        "ID",
 		CreatedAtField: "CreatedAt",
 		UpdatedAtField: "UpdatedAt",
@@ -45,7 +45,7 @@ func NewDefault[T any](collection *mongo.Collection) *Repository[T] {
 //   - A pointer to a newly created Repository instance.
 //
 // Panics:
-//   - If the MongoDB collection in the configuration is not set.
+//   - If the MongoDB Collection in the configuration is not set.
 func New[T any](config *Config) *Repository[T] {
 	if config.IdField == "" {
 		config.IdField = "ID"
@@ -62,11 +62,11 @@ func New[T any](config *Config) *Repository[T] {
 	return &Repository[T]{config: config}
 }
 
-// collection retrieves the MongoDB collection from the repository's configuration.
+// Collection retrieves the MongoDB Collection from the repository's configuration.
 //
 // Returns:
-//   - A pointer to the MongoDB collection.
-func (r *Repository[T]) collection() *mongo.Collection {
+//   - A pointer to the MongoDB Collection.
+func (r *Repository[T]) Collection() *mongo.Collection {
 	return r.config.Collection
 }
 
@@ -93,7 +93,7 @@ func (r *Repository[T]) FindById(id primitive.ObjectID) *T {
 func (r *Repository[T]) FindOne(query bson.M, opts ...*options.FindOneOptions) *T {
 	var entity T
 
-	err := r.collection().FindOne(r.config.Context, query, opts...).Decode(&entity)
+	err := r.Collection().FindOne(r.config.Context, query, opts...).Decode(&entity)
 
 	if err != nil {
 		log.Printf("FindOne error: %s", err.Error())
@@ -114,7 +114,7 @@ func (r *Repository[T]) FindOne(query bson.M, opts ...*options.FindOneOptions) *
 func (r *Repository[T]) Find(query bson.M, opts ...*options.FindOptions) []*T {
 	var entities []*T
 
-	cursor, err := r.collection().Find(r.config.Context, query, opts...)
+	cursor, err := r.Collection().Find(r.config.Context, query, opts...)
 	if err != nil {
 		log.Printf("Find error: %s", err.Error())
 		return nil
@@ -128,7 +128,7 @@ func (r *Repository[T]) Find(query bson.M, opts ...*options.FindOptions) []*T {
 	return entities
 }
 
-// Create inserts a new entity into the MongoDB collection.
+// Create inserts a new entity into the MongoDB Collection.
 // The method automatically sets the ID and CreatedAt fields if they are present in the entity.
 //
 // Parameters:
@@ -145,11 +145,11 @@ func (r *Repository[T]) Create(entity *T) error {
 		er.SetCreatedAt()
 	}
 
-	_, err := r.collection().InsertOne(r.config.Context, entity)
+	_, err := r.Collection().InsertOne(r.config.Context, entity)
 	return err
 }
 
-// Update modifies an existing entity in the MongoDB collection.
+// Update modifies an existing entity in the MongoDB Collection.
 // The method automatically sets the UpdatedAt field to the current time before performing the update.
 //
 // Parameters:
@@ -165,11 +165,11 @@ func (r *Repository[T]) Update(entity *T) error {
 		er.SetUpdateAt()
 	}
 
-	_, err := r.collection().UpdateByID(r.config.Context, er.GetID(), bson.M{"$set": entity})
+	_, err := r.Collection().UpdateByID(r.config.Context, er.GetID(), bson.M{"$set": entity})
 	return err
 }
 
-// Delete removes an entity from the MongoDB collection.
+// Delete removes an entity from the MongoDB Collection.
 // If the configuration supports soft deletes, it sets the DeletedAt field instead of permanently deleting the document.
 //
 // Parameters:
@@ -186,6 +186,6 @@ func (r *Repository[T]) Delete(entity *T) error {
 		return r.Update(entity)
 	}
 
-	_, err := r.collection().DeleteOne(r.config.Context, bson.M{"_id": er.GetID()})
+	_, err := r.Collection().DeleteOne(r.config.Context, bson.M{"_id": er.GetID()})
 	return err
 }
