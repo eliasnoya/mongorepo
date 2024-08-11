@@ -1,4 +1,4 @@
-# go-mongo-repository
+# mongorepo
 
 Is a library for use generic Repository based on Entities (structs) with bson definition
 
@@ -54,6 +54,18 @@ func main() {
 ## Example Entity:
 
 ```go
+// EntityTest represents an example MongoDB entity with fields for ID, creation, update, deletion timestamps, and a name.
+// 
+// This entity is designed to work with the mongorepo package, which provides generic repository functions for MongoDB.
+//
+// Important Notes:
+// 1. **Panic Conditions**: The repository functions will panic under the following circumstances:
+//    - If the `ID` field is not present or is not of type `primitive.ObjectID`.
+//    - If `CreatedAt`, `DeletedAt`, or `UpdatedAt` fields are set in the repository configuration (see `mongorepo.Config`),
+//      but are missing in the entity or are not of type `time.Time`. You can always disable timestamp fields by setting 
+//      the respective fields in `mongorepo.Config` to empty values.
+// 2. **Soft Deletes**: The `DeletedAt` field must include the `omitempty` tag to allow for proper handling of soft deletes,
+//    meaning it will be omitted from the BSON document if it has a zero value (i.e., the field has not been set).
 type EntityTest struct {
 	ID        primitive.ObjectID `bson:"_id"`
 	CreatedAt time.Time          `bson:"created_at"`
@@ -69,7 +81,7 @@ type EntityTest struct {
 // Instance your mongo client
 client, _ := mongo.Connect(context.TODO(), options.Client().ApplyURI("mongodb://localhost:27017"))
 
-// using defaults ID, DeletedAt, CreatedAt, UpdatedAt and Context
+// using defaults ID, CreatedAt, UpdatedAt, DeletedAt and Context
 repo := mongorepo.NewDefault[EntityTest](client.Database("example_db").Collection("entity_test"))
 
 // if name: Jon exists will return an EntityTest with all the mongo document data or nil
@@ -85,13 +97,21 @@ if entity == nil {
 
 ## Using custom Config:
 ```go
+// Example entities with custom ID / CreateAt / UpdatedAt fields names and without softdeletes
 repo := mongorepo.New[EntityTest](&mongorepo.Config{
     Collection:     client.Database("example_db").Collection("entity_test"),
-	Context: 		context.TODO(), // default context.Background()
+	Context: 		context.Background(), // default context.Background()
     IdField:        "MyID", 		// default ID
-    CreatedAtField: "MyCreatedAt", 	// default CreatedAt
-    UpdatedAtField: "MyUpdatedAt", 	// default UpdatedAt
-    DeletedAtField: "MyDeletedAt" 	// default "" (if is empty will hard-delete the documents, if is set to a time.Time field will update that)
+    CreatedAtField: "MyCreatedAt",
+    UpdatedAtField: "MyUpdatedAt",
+    DeletedAtField: ""
+})
+
+// or
+// if you want a repository without timestamps and softdeletes
+// "ID" (mayus) is the default property name for id fields
+repo := mongorepo.New[EntityTest](&mongorepo.Config{
+    Collection:     client.Database("example_db").Collection("entity_test"),
 })
 ```
 

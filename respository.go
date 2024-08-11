@@ -2,11 +2,7 @@ package mongorepo
 
 import (
 	"context"
-	"errors"
-	"fmt"
 	"log"
-	"reflect"
-	"time"
 
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/bson/primitive"
@@ -15,30 +11,44 @@ import (
 )
 
 // Repository provides a generic implementation for data access operations on a specific type `T`.
-// It leverages MongoDB as the underlying database and uses reflection for dynamic field access.
+// It utilizes MongoDB as the underlying database and supports CRUD operations with built-in reflection
+// for dynamic field access and management of common fields like ID, CreatedAt, UpdatedAt, and DeletedAt.
 type Repository[T any] struct {
 	config *Config
 }
 
+// NewDefault initializes a new Repository instance with default configuration settings
+// for a given MongoDB collection.
+//
+// Parameters:
+//   - collection: A pointer to the MongoDB collection where the entities of type `T` are stored.
+//
+// Returns:
+//   - A pointer to a newly created Repository instance.
 func NewDefault[T any](collection *mongo.Collection) *Repository[T] {
 	return New[T](&Config{
-		Collection: collection,
+		Collection:     collection,
+		IdField:        "ID",
+		CreatedAtField: "CreatedAt",
+		UpdatedAtField: "UpdatedAt",
+		DeletedAtField: "DeletedAt",
 	})
 }
 
-// NewRepository initializes a new Repository instance for the specified collection and configuration.
-// It also sets default field names for the ID, CreatedAt, and UpdatedAt fields if not provided.
+// NewRepository initializes a new Repository instance with the specified configuration.
+// If not provided, it assigns default values to common field names like ID, CreatedAt, and UpdatedAt.
+//
+// Parameters:
+//   - config: A pointer to a Config object containing the repository's settings.
+//
+// Returns:
+//   - A pointer to a newly created Repository instance.
+//
+// Panics:
+//   - If the MongoDB collection in the configuration is not set.
 func New[T any](config *Config) *Repository[T] {
 	if config.IdField == "" {
 		config.IdField = "ID"
-	}
-
-	if config.CreatedAtField == "" {
-		config.CreatedAtField = "CreatedAt"
-	}
-
-	if config.UpdatedAtField == "" {
-		config.UpdatedAtField = "UpdatedAt"
 	}
 
 	if config.Context == nil {
@@ -52,72 +62,34 @@ func New[T any](config *Config) *Repository[T] {
 	return &Repository[T]{config: config}
 }
 
-// collection retrieves the MongoDB collection from the repository configuration.
+// collection retrieves the MongoDB collection from the repository's configuration.
+//
+// Returns:
+//   - A pointer to the MongoDB collection.
 func (r *Repository[T]) collection() *mongo.Collection {
 	return r.config.Collection
 }
 
-// setNewObjectID assigns a new ObjectID to the entity's ID field if it is not already set.
-// The ID field must be of type primitive.ObjectID.
-func (r *Repository[T]) setNewObjectID(entity *T) error {
-	entityElem := reflect.ValueOf(entity).Elem()
-	idField := entityElem.FieldByName(r.config.IdField)
-
-	if idField.IsValid() && idField.CanSet() && idField.Type() == reflect.TypeOf(primitive.ObjectID{}) {
-		idField.Set(reflect.ValueOf(primitive.NewObjectID()))
-		return nil
-	}
-
-	errorStr := fmt.Sprintf("Error: ID field %q is either not found or cannot be set. Ensure it is defined as primitive.ObjectID", r.config.IdField)
-	log.Println(errorStr)
-	return errors.New(errorStr)
-}
-
-// getEntityObjectID retrieves the ObjectID from the entity's ID field.
-// Returns primitive.NilObjectID if the field is not found or is not of type primitive.ObjectID.
-func (r *Repository[T]) getEntityObjectID(entity *T) primitive.ObjectID {
-	entityElem := reflect.ValueOf(entity).Elem()
-	idField := entityElem.FieldByName(r.config.IdField)
-
-	if !idField.IsValid() {
-		log.Printf("Error: Field %q not found in entity. Check if %q is the correct field name in the entity struct.", r.config.IdField, r.config.IdField)
-		return primitive.NilObjectID
-	}
-
-	if idField.Type() != reflect.TypeOf(primitive.ObjectID{}) {
-		log.Printf("Error: Field %q in entity is not of type primitive.ObjectID. Actual type: %s", r.config.IdField, idField.Type().String())
-		return primitive.NilObjectID
-	}
-
-	return idField.Interface().(primitive.ObjectID)
-}
-
-// setEntityTimestamp sets the current timestamp to the specified field in the entity.
-// The field must be of type time.Time.
-func (r *Repository[T]) setEntityTimestamp(entity *T, field string) {
-	entityElem := reflect.ValueOf(entity).Elem()
-	timeField := entityElem.FieldByName(field)
-
-	if !timeField.IsValid() {
-		log.Printf("Error: Field %q not found in entity. Ensure the field name is correct.", field)
-		return
-	}
-
-	if timeField.Type() != reflect.TypeOf(time.Time{}) {
-		log.Printf("Error: Field %q in entity is not of type time.Time. Actual type: %s", field, timeField.Type().String())
-		return
-	}
-
-	timeField.Set(reflect.ValueOf(time.Now()))
-}
-
-// FindById retrieves an entity by its ObjectID. It is a convenience method for FindOne.
+// FindById retrieves an entity by its unique MongoDB ObjectID.
+// This method is a convenience wrapper around FindOne.
+//
+// Parameters:
+//   - id: The ObjectID of the entity to retrieve.
+//
+// Returns:
+//   - A pointer to the entity of type `T`, or nil if not found.
 func (r *Repository[T]) FindById(id primitive.ObjectID) *T {
 	return r.FindOne(bson.M{"_id": id})
 }
 
 // FindOne retrieves a single entity matching the provided query filter.
-// Returns nil if no document is found or if an error occurs during retrieval.
+//
+// Parameters:
+//   - query: A BSON map defining the search criteria.
+//   - opts: Optional FindOneOptions to modify the query behavior.
+//
+// Returns:
+//   - A pointer to the entity of type `T`, or nil if no document matches the query.
 func (r *Repository[T]) FindOne(query bson.M, opts ...*options.FindOneOptions) *T {
 	var entity T
 
@@ -132,7 +104,13 @@ func (r *Repository[T]) FindOne(query bson.M, opts ...*options.FindOneOptions) *
 }
 
 // Find retrieves all entities matching the provided query filter.
-// Returns a slice of pointers to the retrieved entities or nil if an error occurs.
+//
+// Parameters:
+//   - query: A BSON map defining the search criteria.
+//   - opts: Optional FindOptions to modify the query behavior (e.g., sorting, pagination).
+//
+// Returns:
+//   - A slice of pointers to entities of type `T` that match the query, or nil if an error occurs.
 func (r *Repository[T]) Find(query bson.M, opts ...*options.FindOptions) []*T {
 	var entities []*T
 
@@ -150,35 +128,64 @@ func (r *Repository[T]) Find(query bson.M, opts ...*options.FindOptions) []*T {
 	return entities
 }
 
-// Create inserts a new entity into the database.
-// Automatically sets the ID and CreatedAt fields if they are present in the entity struct.
+// Create inserts a new entity into the MongoDB collection.
+// The method automatically sets the ID and CreatedAt fields if they are present in the entity.
+//
+// Parameters:
+//   - entity: A pointer to the entity of type `T` to be inserted.
+//
+// Returns:
+//   - An error if the insertion fails.
 func (r *Repository[T]) Create(entity *T) error {
-	if err := r.setNewObjectID(entity); err != nil {
-		return err
+	er := NewEntityReflection(r.config, entity)
+	er.SetNewID()
+
+	// only update CreatedAtField if is configured
+	if r.config.CreatedAtField != "" {
+		er.SetCreatedAt()
 	}
-	r.setEntityTimestamp(entity, r.config.CreatedAtField)
 
 	_, err := r.collection().InsertOne(r.config.Context, entity)
 	return err
 }
 
-// Update modifies an existing entity in the database.
-// Automatically sets the UpdatedAt field to the current time before performing the update.
+// Update modifies an existing entity in the MongoDB collection.
+// The method automatically sets the UpdatedAt field to the current time before performing the update.
+//
+// Parameters:
+//   - entity: A pointer to the entity of type `T` with updated data.
+//
+// Returns:
+//   - An error if the update operation fails.
 func (r *Repository[T]) Update(entity *T) error {
-	r.setEntityTimestamp(entity, r.config.UpdatedAtField)
+	er := NewEntityReflection(r.config, entity)
 
-	_, err := r.collection().UpdateByID(r.config.Context, r.getEntityObjectID(entity), bson.M{"$set": entity})
+	// only update UpdatedAtField if is configured
+	if r.config.UpdatedAtField != "" {
+		er.SetUpdateAt()
+	}
+
+	_, err := r.collection().UpdateByID(r.config.Context, er.GetID(), bson.M{"$set": entity})
 	return err
 }
 
-// Delete removes an entity from the database.
-// If soft delete is enabled, it sets the DeletedAt field instead of permanently deleting the document.
+// Delete removes an entity from the MongoDB collection.
+// If the configuration supports soft deletes, it sets the DeletedAt field instead of permanently deleting the document.
+//
+// Parameters:
+//   - entity: A pointer to the entity of type `T` to be deleted.
+//
+// Returns:
+//   - An error if the deletion fails.
 func (r *Repository[T]) Delete(entity *T) error {
+	er := NewEntityReflection(r.config, entity)
+
+	// make update with timestamp over DeletedAtField if is set
 	if r.config.DeletedAtField != "" {
-		r.setEntityTimestamp(entity, r.config.DeletedAtField)
+		er.SetDeletedAt()
 		return r.Update(entity)
 	}
 
-	_, err := r.collection().DeleteOne(r.config.Context, bson.M{"_id": r.getEntityObjectID(entity)})
+	_, err := r.collection().DeleteOne(r.config.Context, bson.M{"_id": er.GetID()})
 	return err
 }
