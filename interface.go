@@ -11,8 +11,37 @@ import (
 // This interface supports common CRUD operations (Create, Read, Update, Delete) for entities
 // of type `T`, where `T` can be any struct representing a MongoDB document.
 type IRepository[T any] interface {
-	// Access the repository mongo.Collection ptr
+	// Collection retrieves the MongoDB Collection from the repository's configuration.
+	//
+	// Returns:
+	//   - A pointer to the MongoDB Collection.
 	Collection() *mongo.Collection
+
+	// Database retrieves the MongoDB Database from the repository's configuration.
+	//
+	// Returns:
+	//   - A pointer to the MongoDB Database.
+	Database() *mongo.Database
+
+	// Aggregate executes an aggregation pipeline on the MongoDB collection associated with the repository.
+	//
+	// Parameters:
+	//   - pipeline: A MongoDB aggregation pipeline represented as a slice of aggregation stages.
+	//   - opts: Optional aggregation options such as batch size, collation, or max time.
+	//
+	// Returns:
+	//   - (*mongo.Cursor, error): A cursor to iterate over the aggregation result set, or an error if the operation fails.
+	Aggregate(pipeline *mongo.Pipeline, opts ...*options.AggregateOptions) (*mongo.Cursor, error)
+
+	// FindById retrieves a single entity by its unique MongoDB id.
+	//
+	// Parameters:
+	//   - id: the string representation of the object id.
+	//
+	// Returns:
+	//   - A slice of pointers to entities of type `T` that match the criteria.
+	//   - An error if the operation fails.
+	FindByHexId(id string) *T
 
 	// FindById retrieves a single entity by its unique MongoDB ObjectID.
 	//

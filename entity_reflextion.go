@@ -8,13 +8,13 @@ import (
 	"go.mongodb.org/mongo-driver/bson/primitive"
 )
 
-// EntityReflextion provides reflection-based operations on a MongoDB entity.
-type EntityReflextion struct {
+// EntityReflection provides reflection-based operations on a MongoDB entity.
+type EntityReflection struct {
 	entity any
 	config *Config
 }
 
-// NewEntityReflection creates a new EntityReflextion object, ensuring the entity is either a struct or a pointer to a struct.
+// NewEntityReflection creates a new EntityReflection object, ensuring the entity is either a struct or a pointer to a struct.
 // If the entity is not valid, it panics.
 //
 // Parameters:
@@ -22,8 +22,8 @@ type EntityReflextion struct {
 //   - entity: The entity to be reflected upon. Must be a struct or a pointer to a struct.
 //
 // Returns:
-//   - A pointer to an EntityReflextion object.
-func NewEntityReflection(config *Config, entity any) *EntityReflextion {
+//   - A pointer to an EntityReflection object.
+func NewEntityReflection(config *Config, entity any) *EntityReflection {
 	entityType := reflect.TypeOf(entity)
 
 	// Check if entity is a struct or a pointer to a struct
@@ -36,7 +36,7 @@ func NewEntityReflection(config *Config, entity any) *EntityReflextion {
 		config.IdField = "ID"
 	}
 
-	return &EntityReflextion{
+	return &EntityReflection{
 		entity: entity,
 		config: config,
 	}
@@ -47,7 +47,7 @@ func NewEntityReflection(config *Config, entity any) *EntityReflextion {
 //
 // Returns:
 //   - The ObjectID from the entity's ID field.
-func (er *EntityReflextion) GetID() primitive.ObjectID {
+func (er *EntityReflection) GetID() primitive.ObjectID {
 	entityElem := reflect.ValueOf(er.entity).Elem()
 	idField := entityElem.FieldByName(er.config.IdField)
 
@@ -66,7 +66,7 @@ func (er *EntityReflextion) GetID() primitive.ObjectID {
 
 // SetNewID sets a new ObjectID to the entity's ID field specified in the configuration.
 // It panics if the ID field is not found, cannot be set, or is not of type primitive.ObjectID.
-func (er *EntityReflextion) SetNewID() {
+func (er *EntityReflection) SetNewID() {
 	entityElem := reflect.ValueOf(er.entity).Elem()
 	idField := entityElem.FieldByName(er.config.IdField)
 
@@ -79,17 +79,17 @@ func (er *EntityReflextion) SetNewID() {
 }
 
 // SetUpdateAt sets the current time to the entity's UpdatedAt field specified in the configuration.
-func (er *EntityReflextion) SetUpdateAt() {
+func (er *EntityReflection) SetUpdateAt() {
 	er.setTimeStampField(er.config.UpdatedAtField)
 }
 
 // SetCreatedAt sets the current time to the entity's CreatedAt field specified in the configuration.
-func (er *EntityReflextion) SetCreatedAt() {
+func (er *EntityReflection) SetCreatedAt() {
 	er.setTimeStampField(er.config.CreatedAtField)
 }
 
 // SetDeletedAt sets the current time to the entity's DeletedAt field specified in the configuration.
-func (er *EntityReflextion) SetDeletedAt() {
+func (er *EntityReflection) SetDeletedAt() {
 	er.setTimeStampField(er.config.DeletedAtField)
 }
 
@@ -98,7 +98,7 @@ func (er *EntityReflextion) SetDeletedAt() {
 //
 // Parameters:
 //   - field: The name of the field to set the timestamp on.
-func (er *EntityReflextion) setTimeStampField(field string) {
+func (er *EntityReflection) setTimeStampField(field string) {
 	entityElem := reflect.ValueOf(er.entity).Elem()
 	timeField := entityElem.FieldByName(field)
 

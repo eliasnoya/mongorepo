@@ -3,7 +3,10 @@ package mongorepo
 import (
 	"context"
 	"log"
+	"reflect"
 
+	"github.com/iancoleman/strcase"
+	"github.com/jinzhu/inflection"
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/bson/primitive"
 	"go.mongodb.org/mongo-driver/mongo"
@@ -15,24 +18,6 @@ import (
 // for dynamic field access and management of common fields like ID, CreatedAt, UpdatedAt, and DeletedAt.
 type Repository[T any] struct {
 	config *Config
-}
-
-// NewDefault initializes a new Repository instance with default configuration settings
-// for a given MongoDB Collection.
-//
-// Parameters:
-//   - Collection: A pointer to the MongoDB Collection where the entities of type `T` are stored.
-//
-// Returns:
-//   - A pointer to a newly created Repository instance.
-func NewDefault[T any](Collection *mongo.Collection) *Repository[T] {
-	return New[T](&Config{
-		Collection:     Collection,
-		IdField:        "ID",
-		CreatedAtField: "CreatedAt",
-		UpdatedAtField: "UpdatedAt",
-		DeletedAtField: "DeletedAt",
-	})
 }
 
 // NewRepository initializes a new Repository instance with the specified configuration.
@@ -55,8 +40,21 @@ func New[T any](config *Config) *Repository[T] {
 		config.Context = context.Background()
 	}
 
-	if config.Collection == nil {
-		panic("Configuration error: The *mongo.Collection in the Collection property of mongorepo.Config is not set.")
+	if config.MongoClient == nil {
+		panic("Configuration error: The *mongo.Client is not set.")
+	}
+
+	if config.DbName == "" {
+		panic("Configuration error: The DbName is not set.")
+	}
+
+	// Detect collection name if is not set
+	if config.CollectionName == "" {
+		exampleEntityType := reflect.TypeOf((*T)(nil)).Elem()
+		name := exampleEntityType.Name()
+		snakeCaseStr := strcase.ToSnake(name)
+
+		config.CollectionName = inflection.Plural(snakeCaseStr)
 	}
 
 	return &Repository[T]{config: config}
@@ -67,7 +65,38 @@ func New[T any](config *Config) *Repository[T] {
 // Returns:
 //   - A pointer to the MongoDB Collection.
 func (r *Repository[T]) Collection() *mongo.Collection {
-	return r.config.Collection
+	return r.Database().Collection(r.config.CollectionName, r.config.CollectionOptions)
+}
+
+// Database retrieves the MongoDB Database from the repository's configuration.
+//
+// Returns:
+//   - A pointer to the MongoDB Database.
+func (r *Repository[T]) Database() *mongo.Database {
+	return r.config.MongoClient.Database(r.config.DbName, r.config.DatabaseOptions)
+}
+
+// Aggregate executes an aggregation pipeline on the MongoDB collection associated with the repository.
+//
+// Parameters:
+//   - pipeline: A MongoDB aggregation pipeline represented as a slice of aggregation stages.
+//   - opts: Optional aggregation options such as batch size, collation, or max time.
+//
+// Returns:
+//   - (*mongo.Cursor, error): A cursor to iterate over the aggregation result set, or an error if the operation fails.
+func (r *Repository[T]) Aggregate(pipeline *mongo.Pipeline, opts ...*options.AggregateOptions) (*mongo.Cursor, error) {
+	return r.Database().Aggregate(r.config.Context, pipeline, opts...)
+}
+
+// Document...todo
+func (r *Repository[T]) FindByHexId(id string) *T {
+	objectID, err := primitive.ObjectIDFromHex(id)
+	if err != nil {
+		log.Printf("FindByHexId error: %s", err.Error())
+		return nil
+	}
+
+	return r.FindById(objectID)
 }
 
 // FindById retrieves an entity by its unique MongoDB ObjectID.
