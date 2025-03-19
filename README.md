@@ -9,6 +9,15 @@
 - **Soft Deletes**: Optionally support soft deletes, allowing you to mark documents as deleted without physically removing them from the database.
 - **Timestamps**: Automatically manage `createdAt` and `updatedAt` timestamps, making it easy to track document lifecycle changes.
 
+## Important Notes (May Not Be Applicable to All Devs/Projects)
+- **Bson tags are mandatory**: Fields without the `bson:"tag"` will be ignored.
+- **Empty fields**: All data types, except for `bool` and numeric types, will be ignored if they are empty. There's no need to set the `omitempty` tag.
+- **On Create()**: A field named `created_at` will always be set with `time.Now().UTC()`.
+- **On Update()**: A field named `updated_at` will always be set with `time.Now().UTC()`.
+- **On Delete(entity, true)**: If the second parameter is `true`, a field named `deleted_at` will be set with `time.Now().UTC()`. 
+	-	This represents a **Soft Delete**.
+
+
 ## Install:
 
 ```bash
@@ -83,19 +92,29 @@ func main() {
 	if entityStored == nil {
 		// not found
 	}
+	// entityStored is a *EntityTest ptr
+	fmt.Println(entityStored.Value)
 
+	// Use second parameter mongorepo.FindOpts{...} for customize query
 	entityList := repo.Find(mongorepo.Find{"value": "10"})
 
 	if entityList == nil {
 		// not found
 	}
+	// entityList an slice []*EntityTest
+	for _, item := range entityList {
+		fmt.Println(item.Active)
+	}
 
+
+	// Use second parameter mongorepo.FindOneOpts{...} for customize query
 	entityOne := repo.FindOne(mongorepo.Find{"value": "10"})
 
 	if entityOne == nil {
 		// not found
 	}
-
+	// entityOne is a *EntityTest ptr
+	fmt.Println(entityOne.Name)
 }
 ```
 

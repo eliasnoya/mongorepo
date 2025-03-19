@@ -89,6 +89,10 @@ func main() {
 		// not found
 	}
 
+	for _, item := range entityList {
+		fmt.Println(item.Active)
+	}
+
 	entityOne := repo.FindOne(mongorepo.Find{"value": "10"})
 
 	if entityOne == nil {
