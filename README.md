@@ -31,11 +31,12 @@ import (
 )
 
 type EntityTest struct {
-	ID        primitive.ObjectID `bson:"_id"`
-	CreatedAt time.Time          `bson:"created_at"`
-	UpdatedAt time.Time          `bson:"updated_at,omitempty"`
-	DeletedAt time.Time          `bson:"deleted_at,omitempty"`
-	Name      string             `bson:"name"`
+	ID        	primitive.ObjectID 	`bson:"_id"`	// Even if you dont define this field will set _id = primitive.NewObjectID() with repo.Create(...)
+	CreatedAt 	time.Time          	`bson:"created_at"`	// Even if you dont define this field will set created_at = time.Now().UTC() with repo.Create(...)
+	UpdatedAt 	time.Time          	`bson:"updated_at"`	// Even if you dont define this field will set updated_at = time.Now().UTC() with repo.Update(...)
+	DeletedAt 	time.Time          	`bson:"deleted_at"`	// dont forget deleted_at if you want to softDelete document repo.Delete(id, true)
+	Name      	string             	`bson:"name" validate:"required"`
+	Value		int 				`bson:"value"`
 }
 
 func main() {
@@ -46,128 +47,56 @@ func main() {
 	}
 
 	repo := mongorepo.New[EntityTest](&mongorepo.Config{
-		Collection: client.Database("sarasa").Collection("entity_test"),
+		Client:     client,
+		Database:   "default_db",
+		Collection: "entity_test",
 	})
 
-	repo.Create(&EntityTest{
-		Name: "Elias Noya",
-	})
+	entity := &EntityTest{
+		Name: "Elias Noya", // name is required if isnt set on Create() or Update() will fail
+	}
+
+	createErr := repo.Create(entity)
+
+	if createErr != nil {
+		fmt.Println(createErr.Error())
+	}
+
+	entity.Value = 10
+	updateErr := repo.Update("67da26f5ac7a82a238854216", entity)
+
+	if updateErr != nil {
+		fmt.Println(updateErr.Error())
+	}
+
+	fmt.Println(entity.Name) // Elias Noya
+	fmt.Println(entity.Value) // 10
+
+	deleteErr := repo.Delete("67da26f5ac7a82a238854216", true) // delete soft (update deleted_at field)
+
+	if deleteErr != nil {
+		fmt.Println(deleteErr.Error())
+	}
+
+	entityStored := repo.FindById("67da26f5ac7a82a238854216")
+
+	if entityStored == nil {
+		// not found
+	}
+
+	entityList := repo.Find(mongorepo.Find{"value": "10"})
+
+	if entityList == nil {
+		// not found
+	}
+
+	entityOne := repo.FindOne(mongorepo.Find{"value": "10"})
+
+	if entityOne == nil {
+		// not found
+	}
+
 }
-```
-
-
-## Example Entity:
-
-```go
-// EntityTest represents an example MongoDB entity with fields for ID, creation, update, deletion timestamps, and a name.
-// 
-// This entity is designed to work with the mongorepo package, which provides generic repository functions for MongoDB.
-//
-// Important Notes:
-// 1. **Panic Conditions**: The repository functions will panic under the following circumstances:
-//    - If the `ID` field is not present or is not of type `primitive.ObjectID`.
-//    - If `CreatedAt`, `DeletedAt`, or `UpdatedAt` fields are set in the repository configuration (see `mongorepo.Config`),
-//      but are missing in the entity or are not of type `time.Time`. You can always disable timestamp fields by setting 
-//      the respective fields in `mongorepo.Config` to empty values.
-// 2. **Soft Deletes**: The `DeletedAt` field must include the `omitempty` tag to allow for proper handling of soft deletes,
-//    meaning it will be omitted from the BSON document if it has a zero value (i.e., the field has not been set).
-type EntityTest struct {
-	ID        primitive.ObjectID `bson:"_id"`
-	CreatedAt time.Time          `bson:"created_at"`
-	UpdatedAt time.Time          `bson:"updated_at,omitempty"`
-	DeletedAt time.Time          `bson:"deleted_at,omitempty"` // Important!! dont forget omitempty for entities with softdeletes
-	Name      string             `bson:"name"`
-}
-```
-
-## Using the go-generic repository:
-
-```go
-// Instance your mongo client
-client, _ := mongo.Connect(context.TODO(), options.Client().ApplyURI("mongodb://localhost:27017"))
-
-// using defaults ID, CreatedAt, UpdatedAt, DeletedAt and Context
-repo := mongorepo.New[EntityTest](&mongorepo.Config{
-	MongoClient:    client,
-	DbName:         "test_db",
-	IdField:        "MyID",      // Default: ID
-	CreatedAtField: "CreatedAt", // Default: disabled
-	UpdatedAtField: "UpdatedAt", // Default: disabled
-	DeletedAtField: "DeletedAt", // Default: disabled
-})
-
-// if name: Jon exists will return an EntityTest with all the mongo document data or nil
-// REMEMBER the repo will not exclude automatically when a document is softDeleted with DeletedAtField,
-// if you want only non-deleted records add in the query for this example:
-// bson.M{"name": "Jon", "deleted_at": bson.M{"$exists": false}}
-entity := repo.FindOne(bson.M{"name": "Jon"}) 
-
-if entity == nil {
-	return "Document not found"
-}
-```
-
-## Using Config:
-```go
-// Example entities with custom ID / CreateAt / UpdatedAt fields names and without softdeletes
-repo := mongorepo.New[EntityTest](&mongorepo.Config{
-	MongoClient:    client, 			// Mandatory config
-	DbName:         "test_db", 			// Mandatory config
-	CollectionName: "my_entity_test" 	// Default if not set: snake case, lower and plural struct name, in this case entity_tests
-	IdField:        "MyID",      		// Default if not set: ID
-	CreatedAtField: "CreatedAt", 		// Default if not set: disabled
-	UpdatedAtField: "UpdatedAt", 		// Default if not set: disabled
-	DeletedAtField: "DeletedAt", 		// Default if not set: disabled
-})
-```
-```go
-// All config properties
-// Config holds the configuration necessary for connecting and interacting with a MongoDB collection.
-type Config struct {
-	MongoClient       *mongo.Client              // The MongoDB client instance used for database connections.
-	DatabaseOptions   *options.DatabaseOptions   // The MongoDb Database options, default: nil
-	CollectionOptions *options.CollectionOptions // The MongoDb Collection options, default: nil
-	DbName            string                     // The name of the database where the collection resides.
-	CollectionName    string                     // The name of the collection representing the entity.
-	Context           context.Context            // The context to manage request lifecycle (e.g., timeouts, cancellations) during MongoDB operations.
-	IdField           string                     // The field in the entity struct that represents the "_id" field in MongoDB, which must be a primitive.ObjectID.
-	DeletedAtField    string                     // The field in the entity struct to track soft deletes, indicating when a document is marked as deleted.
-	CreatedAtField    string                     // The field in the entity struct to store the timestamp of when the document was created; must be of type time.Time.
-	UpdatedAtField    string                     // The field in the entity struct to store the timestamp of when the document was last updated; must be of type time.Time.
-}
-```
-## Crud Operations
-
-```go
-// Create
-err := repo.Create(&EntityTest{
-    Name: "Elías",
-})
-
-// Update
-err := repo.Update(&EntityTest{
-    Id:     primitive.ObjectIDFromHex("66b70c0eb9bd318bec55d93d")
-    Name:   "Jorge",
-})
-
-// Delete
-err := repo.Delete(&EntityTest{
-    Id:     primitive.ObjectIDFromHex("66b70c0eb9bd318bec55d93d")
-})
-
-// FindByHexId
-entity := repo.FindByHexId("66b70c0eb9bd318bec55d93d")
-// or FindById(primitve.ObjectID)
-
-// FindOne (by name in this case)
-entity := repo.FindOne(bson.M{
-    "name": "Elías",
-}, &options.FindOneOptions{
-    Sort: bson.M{"created_at": -1}
-})
-
-// Find (no filters, sorted by created_at)
-entities := repo.Find(bson.M{}, &options.FindOptions{Sort: bson.M{"created_at": -1}})
 ```
 
 ## Using your own implementations
@@ -185,15 +114,16 @@ type MyEntityRepository struct {
 func NewMyEntityRepository(client *mongo.Client, dbname string) *MyEntityRepository {
 	return &MyEntityRepository{
 		IRepository: mongorepo.New[EntityTest](&mongorepo.Config{
-			MongoClient: client, // Mandatory config
-			DbName:      dbname, // Mandatory config
+			Client:     client,
+			Database:   dbname,
+			Collection: "entity_test",
 		}),
 	}
 }
 
 func (r *MyEntityRepository) MyFunc() {
 	// my custom logic and/or queries
-	cursor, err := r.Aggregate(&mongo.Pipeline{/* .... */})
+	cursor, err := r.Aggregate(&mongorepo.Pipe{/* .... */})
 }
 
 // Instantiate your custom repository by passing a generic Repository[T] implementation. 

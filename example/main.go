@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"time"
 
@@ -52,38 +51,49 @@ func main() {
 		Collection: "entity_test",
 	})
 
-	createEntity := &EntityTest{
-		Name:  "Elias",
-		Value: 10,
+	entity := &EntityTest{
+		Name: "Elias Noya", // name is required if isnt set on Create() or Update() will fail
 	}
 
-	createErr := repo.Create(createEntity)
+	createErr := repo.Create(entity)
 
 	if createErr != nil {
 		fmt.Println(createErr.Error())
 	}
 
-	jr0, _ := json.Marshal(createEntity)
-
-	fmt.Println(string(jr0))
-
-	repo.SetDatabase("tenant_2").Create(createEntity)
-
-	repo.Delete(createEntity.ID.Hex(), true)
-
-	createEntity.Active = false
-	createEntity.Value = 0
-
-	updateErr := repo.SetDatabase("tenant_2").Update("67da1de1c48a6b86134e3c98", createEntity)
+	entity.Value = 10
+	updateErr := repo.Update("67da26f5ac7a82a238854216", entity)
 
 	if updateErr != nil {
 		fmt.Println(updateErr.Error())
 	}
 
-	find := repo.FindOne(mongorepo.Find{})
+	fmt.Println(entity.Name)  // Elias Noya
+	fmt.Println(entity.Value) // 10
 
-	jr, _ := json.Marshal(find)
-	fmt.Println("Entity find:", string(jr))
+	deleteErr := repo.Delete("67da26f5ac7a82a238854216", true) // delete soft (update deleted_at field)
+
+	if deleteErr != nil {
+		fmt.Println(deleteErr.Error())
+	}
+
+	entityStored := repo.FindById("67da26f5ac7a82a238854216")
+
+	if entityStored == nil {
+		// not found
+	}
+
+	entityList := repo.Find(mongorepo.Find{"value": "10"})
+
+	if entityList == nil {
+		// not found
+	}
+
+	entityOne := repo.FindOne(mongorepo.Find{"value": "10"})
+
+	if entityOne == nil {
+		// not found
+	}
 
 	// result := repo.Find(mongorepo.Find{"name": "Florencia Noya"})
 

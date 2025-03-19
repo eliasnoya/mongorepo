@@ -1,93 +1,46 @@
 package mongorepo
 
 import (
-	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/mongo"
-	"go.mongodb.org/mongo-driver/mongo/options"
 )
 
-// IRepository defines a generic interface for data access operations on a specific type `T`.
-// This interface supports common CRUD operations (Create, Read, Update, Delete) for entities
-// of type `T`, where `T` can be any struct representing a MongoDB document.
+// Repository defines a generic interface for a repository that interacts with MongoDB collections.
+// It supports CRUD operations for entities of type T, along with other utility methods.
 type IRepository[T any] interface {
-	// Collection retrieves the MongoDB Collection from the repository's configuration.
-	//
-	// Returns:
-	//   - A pointer to the MongoDB Collection.
+	// SetDatabase sets the database name in the repository configuration and returns the updated repository.
+	SetDatabase(name string) *Repository[T]
+
+	// Collection returns the MongoDB collection instance associated with the repository.
 	Collection() *mongo.Collection
 
-	// Database retrieves the MongoDB Database from the repository's configuration.
-	//
-	// Returns:
-	//   - A pointer to the MongoDB Database.
+	// Database returns the MongoDB database instance associated with the repository.
 	Database() *mongo.Database
 
-	// Aggregate executes an aggregation pipeline on the MongoDB collection associated with the repository.
-	//
-	// Parameters:
-	//   - pipeline: A MongoDB aggregation pipeline represented as a slice of aggregation stages.
-	//   - opts: Optional aggregation options such as batch size, collation, or max time.
-	//
-	// Returns:
-	//   - (*mongo.Cursor, error): A cursor to iterate over the aggregation result set, or an error if the operation fails.
-	Aggregate(pipeline *mongo.Pipeline, opts ...*options.AggregateOptions) (*mongo.Cursor, error)
+	// Aggregate performs an aggregation pipeline query on the collection.
+	// It returns a cursor that can be iterated to access the resulting documents.
+	Aggregate(pipeline *Pipe, opts ...*AggrOpts) (*mongo.Cursor, error)
 
-	// FindById retrieves a single entity by its unique MongoDB id.
-	//
-	// Parameters:
-	//   - id: the string representation of the object id.
-	//
-	// Returns:
-	//   - A slice of pointers to entities of type `T` that match the criteria.
-	//   - An error if the operation fails.
+	// FindById finds a document by its ID. The ID is provided as a string, and the document is returned
+	// as a pointer to the entity of type T.
 	FindById(id string) *T
 
-	// FindOne executes a query to retrieve a single entity matching the provided search criteria.
-	//
-	// Parameters:
-	//   - query: A BSON map defining the search criteria.
-	//   - opts: Optional FindOneOptions to modify the query behavior.
-	//
-	// Returns:
-	//   - A pointer to the entity of type `T`, or nil if no entity matches the criteria.
-	//   - An error if the operation fails.
-	FindOne(query bson.M, opts ...*options.FindOneOptions) *T
+	// Find performs a query with the provided filter and options, returning a slice of entities of type T.
+	// It uses the FindOne method internally for querying multiple results.
+	Find(find Find, opts ...*FindOpts) []*T
 
-	// Find retrieves a list of entities that match the provided search criteria.
-	//
-	// Parameters:
-	//   - query: A BSON map defining the search criteria.
-	//   - opts: Optional FindOptions to modify the query behavior, such as sorting or pagination.
-	//
-	// Returns:
-	//   - A slice of pointers to entities of type `T` that match the criteria.
-	//   - An error if the operation fails.
-	Find(query bson.M, opts ...*options.FindOptions) []*T
+	// FindOne performs a query with the provided filter and options, returning a single entity of type T.
+	// If no result is found, it returns nil.
+	FindOne(find Find, opts ...*FindOneOpts) *T
 
-	// Create inserts a new entity into the MongoDB collection.
-	//
-	// Parameters:
-	//   - entity: A pointer to the entity of type `T` to be inserted.
-	//
-	// Returns:
-	//   - An error if the insertion fails.
+	// Create inserts a new document into the collection representing the entity of type T.
+	// If the entity is valid, it returns nil. It may also update the entity with the inserted values.
 	Create(entity *T) error
 
-	// Update modifies an existing entity in the MongoDB collection.
-	//
-	// Parameters:
-	//   - entity: A pointer to the entity of type `T` with updated fields.
-	//
-	// Returns:
-	//   - An error if the update operation fails.
-	Update(entity *T) error
+	// Update updates an existing document in the collection based on the provided ID and entity of type T.
+	// If the entity is valid, it returns nil, and the entity is updated with the new values.
+	Update(id string, entity *T) error
 
-	// Delete removes an entity from the MongoDB collection by its ObjectID.
-	//
-	// Parameters:
-	//   - entity: A pointer to the entity of type `T` to be deleted.
-	//
-	// Returns:
-	//   - An error if the deletion fails.
-	Delete(entity *T) error
+	// Delete removes a document from the collection based on the provided ID.
+	// If the 'soft' flag is true, it performs a soft delete by setting the "deleted_at" field.
+	Delete(id string, soft bool) error
 }

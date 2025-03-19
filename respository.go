@@ -18,18 +18,31 @@ import (
 
 // Aliases
 
+// D is an alias for bson.D (a slice of BSON elements).
 type D = bson.D
+
+// Find is an alias for bson.M (a map of BSON elements used for queries).
 type Find = bson.M
+
+// FindOneOpts is an alias for options.FindOneOptions, used to customize the FindOne query.
 type FindOneOpts = options.FindOneOptions
+
+// FindOpts is an alias for options.FindOptions, used to customize the Find query.
 type FindOpts = options.FindOptions
+
+// Pipe is an alias for mongo.Pipeline, used for aggregation pipelines.
 type Pipe = mongo.Pipeline
+
+// AggrOpts is an alias for options.AggregateOptions, used to customize aggregation queries.
 type AggrOpts = options.AggregateOptions
 
+// ValidationResult holds the result of validating an entity.
 type ValidationResult struct {
-	Valid  bool
-	Errors map[string][]string
+	Valid  bool                // True if the entity is valid, false otherwise.
+	Errors map[string][]string // Map of field names to validation error messages.
 }
 
+// Config holds the configuration for the Repository, including MongoDB client, database, and collection.
 type Config struct {
 	Client     *mongo.Client   // The MongoDB client instance used for database connections.
 	Database   string          // The name of the database where the collection resides.
@@ -41,9 +54,11 @@ type Config struct {
 // It utilizes MongoDB as the underlying database and supports CRUD operations with built-in reflection
 // for dynamic field access and management of common fields like ID, CreatedAt, UpdatedAt, and DeletedAt.
 type Repository[T any] struct {
-	config *Config
+	config *Config // Configuration for the repository, including MongoDB settings.
 }
 
+// New creates a new Repository instance with the given configuration.
+// It performs validation on the configuration (ensuring context, client, and collection are set).
 func New[T any](config *Config) *Repository[T] {
 	if config.Context == nil {
 		config.Context = context.Background()
@@ -53,7 +68,7 @@ func New[T any](config *Config) *Repository[T] {
 		panic("Configuration error: The *mongo.Client is not set.")
 	}
 
-	// Detect collection name if is not set
+	// Detect collection name if not set
 	if config.Collection == "" {
 		panic("Configuration error: The Collection name is not set.")
 	}
@@ -61,15 +76,18 @@ func New[T any](config *Config) *Repository[T] {
 	return &Repository[T]{config: config}
 }
 
+// SetDatabase sets the database name for the repository.
 func (r *Repository[T]) SetDatabase(name string) *Repository[T] {
 	r.config.Database = name
 	return r
 }
 
+// Collection returns the MongoDB collection associated with the repository.
 func (r *Repository[T]) Collection() *mongo.Collection {
 	return r.Database().Collection(r.config.Collection)
 }
 
+// Database returns the MongoDB database associated with the repository.
 func (r *Repository[T]) Database() *mongo.Database {
 	if r.config.Database == "" {
 		panic("Configuration error: The Database name is not set. Set in New or use SetDatabase(name)")
@@ -78,14 +96,17 @@ func (r *Repository[T]) Database() *mongo.Database {
 	return r.config.Client.Database(r.config.Database)
 }
 
+// Aggregate performs an aggregation query on the MongoDB collection.
 func (r *Repository[T]) Aggregate(pipeline *Pipe, opts ...*AggrOpts) (*mongo.Cursor, error) {
 	return r.Database().Aggregate(r.config.Context, pipeline, opts...)
 }
 
+// FindById retrieves an entity by its ID from the MongoDB collection.
 func (r *Repository[T]) FindById(id string) *T {
 	return r.FindOne(bson.M{"_id": r.createObjectId(id)})
 }
 
+// FindOne retrieves a single entity from the MongoDB collection based on the given query.
 func (r *Repository[T]) FindOne(find Find, opts ...*FindOneOpts) *T {
 	var entity T
 
@@ -99,6 +120,7 @@ func (r *Repository[T]) FindOne(find Find, opts ...*FindOneOpts) *T {
 	return &entity
 }
 
+// Find retrieves multiple entities from the MongoDB collection based on the given query.
 func (r *Repository[T]) Find(find Find, opts ...*FindOpts) []*T {
 	var entities []*T
 
@@ -116,6 +138,8 @@ func (r *Repository[T]) Find(find Find, opts ...*FindOpts) []*T {
 	return entities
 }
 
+// Create inserts a new entity into the MongoDB collection.
+// It validates the entity and generates a new ObjectId and created_at timestamp.
 func (r *Repository[T]) Create(entity *T) error {
 	if validateErr := r.validate(entity); validateErr != nil {
 		return validateErr
@@ -153,6 +177,8 @@ func (r *Repository[T]) Create(entity *T) error {
 	return nil
 }
 
+// Update modifies an existing entity in the MongoDB collection based on its ID.
+// It validates the entity and sets the updated_at timestamp.
 func (r *Repository[T]) Update(id string, entity *T) error {
 	if validateErr := r.validate(entity); validateErr != nil {
 		return validateErr
@@ -185,6 +211,8 @@ func (r *Repository[T]) Update(id string, entity *T) error {
 	return nil
 }
 
+// Delete removes an entity from the MongoDB collection based on its ID.
+// It can perform a soft delete (set the deleted_at field) or a hard delete (remove the document).
 func (r *Repository[T]) Delete(id string, soft bool) error {
 	if soft {
 		err := r.Collection().FindOneAndUpdate(
@@ -199,6 +227,7 @@ func (r *Repository[T]) Delete(id string, soft bool) error {
 	return err
 }
 
+// validate checks if the given entity passes validation using the go-playground/validator library.
 func (r *Repository[T]) validate(entity *T) error {
 	validate := validator.New()
 
@@ -232,6 +261,7 @@ func (r *Repository[T]) validate(entity *T) error {
 	return nil
 }
 
+// createObjectId converts a string ID to a MongoDB ObjectId.
 func (r *Repository[T]) createObjectId(id string) *primitive.ObjectID {
 	objectID, err := primitive.ObjectIDFromHex(id)
 	if err != nil {
@@ -242,6 +272,7 @@ func (r *Repository[T]) createObjectId(id string) *primitive.ObjectID {
 	return &objectID
 }
 
+// parseEntity converts an entity to a BSON map for storage in MongoDB.
 func (r *Repository[T]) parseEntity(obj any) bson.M {
 	val := reflect.ValueOf(obj)
 	typ := val.Type()
@@ -292,6 +323,7 @@ func (r *Repository[T]) parseEntity(obj any) bson.M {
 	return result
 }
 
+// isNumeric checks if the given reflect.Kind is a numeric type.
 func (r *Repository[T]) isNumeric(kind reflect.Kind) bool {
 	switch kind {
 	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64,
