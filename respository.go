@@ -2,16 +2,40 @@ package mongorepo
 
 import (
 	"context"
+	"encoding/json"
+	"errors"
 	"log"
 	"reflect"
+	"strings"
+	"time"
 
-	"github.com/iancoleman/strcase"
-	"github.com/jinzhu/inflection"
+	"github.com/go-playground/validator/v10"
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/bson/primitive"
 	"go.mongodb.org/mongo-driver/mongo"
 	"go.mongodb.org/mongo-driver/mongo/options"
 )
+
+// Aliases
+
+type D = bson.D
+type Find = bson.M
+type FindOneOpts = options.FindOneOptions
+type FindOpts = options.FindOptions
+type Pipe = mongo.Pipeline
+type AggrOpts = options.AggregateOptions
+
+type ValidationResult struct {
+	Valid  bool
+	Errors map[string][]string
+}
+
+type Config struct {
+	Client     *mongo.Client   // The MongoDB client instance used for database connections.
+	Database   string          // The name of the database where the collection resides.
+	Collection string          // The name of the collection representing the entity.
+	Context    context.Context // The context to manage request lifecycle (e.g., timeouts, cancellations) during MongoDB operations.
+}
 
 // Repository provides a generic implementation for data access operations on a specific type `T`.
 // It utilizes MongoDB as the underlying database and supports CRUD operations with built-in reflection
@@ -20,109 +44,52 @@ type Repository[T any] struct {
 	config *Config
 }
 
-// NewRepository initializes a new Repository instance with the specified configuration.
-// If not provided, it assigns default values to common field names like ID, CreatedAt, and UpdatedAt.
-//
-// Parameters:
-//   - config: A pointer to a Config object containing the repository's settings.
-//
-// Returns:
-//   - A pointer to a newly created Repository instance.
-//
-// Panics:
-//   - If the MongoDB Collection in the configuration is not set.
 func New[T any](config *Config) *Repository[T] {
-	if config.IdField == "" {
-		config.IdField = "ID"
-	}
-
 	if config.Context == nil {
 		config.Context = context.Background()
 	}
 
-	if config.MongoClient == nil {
+	if config.Client == nil {
 		panic("Configuration error: The *mongo.Client is not set.")
 	}
 
-	if config.DbName == "" {
-		panic("Configuration error: The DbName is not set.")
-	}
-
 	// Detect collection name if is not set
-	if config.CollectionName == "" {
-		exampleEntityType := reflect.TypeOf((*T)(nil)).Elem()
-		name := exampleEntityType.Name()
-		snakeCaseStr := strcase.ToSnake(name)
-
-		config.CollectionName = inflection.Plural(snakeCaseStr)
+	if config.Collection == "" {
+		panic("Configuration error: The Collection name is not set.")
 	}
 
 	return &Repository[T]{config: config}
 }
 
-// Collection retrieves the MongoDB Collection from the repository's configuration.
-//
-// Returns:
-//   - A pointer to the MongoDB Collection.
+func (r *Repository[T]) SetDatabase(name string) *Repository[T] {
+	r.config.Database = name
+	return r
+}
+
 func (r *Repository[T]) Collection() *mongo.Collection {
-	return r.Database().Collection(r.config.CollectionName, r.config.CollectionOptions)
+	return r.Database().Collection(r.config.Collection)
 }
 
-// Database retrieves the MongoDB Database from the repository's configuration.
-//
-// Returns:
-//   - A pointer to the MongoDB Database.
 func (r *Repository[T]) Database() *mongo.Database {
-	return r.config.MongoClient.Database(r.config.DbName, r.config.DatabaseOptions)
+	if r.config.Database == "" {
+		panic("Configuration error: The Database name is not set. Set in New or use SetDatabase(name)")
+	}
+
+	return r.config.Client.Database(r.config.Database)
 }
 
-// Aggregate executes an aggregation pipeline on the MongoDB collection associated with the repository.
-//
-// Parameters:
-//   - pipeline: A MongoDB aggregation pipeline represented as a slice of aggregation stages.
-//   - opts: Optional aggregation options such as batch size, collation, or max time.
-//
-// Returns:
-//   - (*mongo.Cursor, error): A cursor to iterate over the aggregation result set, or an error if the operation fails.
-func (r *Repository[T]) Aggregate(pipeline *mongo.Pipeline, opts ...*options.AggregateOptions) (*mongo.Cursor, error) {
+func (r *Repository[T]) Aggregate(pipeline *Pipe, opts ...*AggrOpts) (*mongo.Cursor, error) {
 	return r.Database().Aggregate(r.config.Context, pipeline, opts...)
 }
 
-// Document...todo
-func (r *Repository[T]) FindByHexId(id string) *T {
-	objectID, err := primitive.ObjectIDFromHex(id)
-	if err != nil {
-		log.Printf("FindByHexId error: %s", err.Error())
-		return nil
-	}
-
-	return r.FindById(objectID)
+func (r *Repository[T]) FindById(id string) *T {
+	return r.FindOne(bson.M{"_id": r.createObjectId(id)})
 }
 
-// FindById retrieves an entity by its unique MongoDB ObjectID.
-// This method is a convenience wrapper around FindOne.
-//
-// Parameters:
-//   - id: The ObjectID of the entity to retrieve.
-//
-// Returns:
-//   - A pointer to the entity of type `T`, or nil if not found.
-func (r *Repository[T]) FindById(id primitive.ObjectID) *T {
-	return r.FindOne(bson.M{"_id": id})
-}
-
-// FindOne retrieves a single entity matching the provided query filter.
-//
-// Parameters:
-//   - query: A BSON map defining the search criteria.
-//   - opts: Optional FindOneOptions to modify the query behavior.
-//
-// Returns:
-//   - A pointer to the entity of type `T`, or nil if no document matches the query.
-func (r *Repository[T]) FindOne(query bson.M, opts ...*options.FindOneOptions) *T {
+func (r *Repository[T]) FindOne(find Find, opts ...*FindOneOpts) *T {
 	var entity T
 
-	err := r.Collection().FindOne(r.config.Context, query, opts...).Decode(&entity)
+	err := r.Collection().FindOne(r.config.Context, find, opts...).Decode(&entity)
 
 	if err != nil {
 		log.Printf("FindOne error: %s", err.Error())
@@ -132,18 +99,10 @@ func (r *Repository[T]) FindOne(query bson.M, opts ...*options.FindOneOptions) *
 	return &entity
 }
 
-// Find retrieves all entities matching the provided query filter.
-//
-// Parameters:
-//   - query: A BSON map defining the search criteria.
-//   - opts: Optional FindOptions to modify the query behavior (e.g., sorting, pagination).
-//
-// Returns:
-//   - A slice of pointers to entities of type `T` that match the query, or nil if an error occurs.
-func (r *Repository[T]) Find(query bson.M, opts ...*options.FindOptions) []*T {
+func (r *Repository[T]) Find(find Find, opts ...*FindOpts) []*T {
 	var entities []*T
 
-	cursor, err := r.Collection().Find(r.config.Context, query, opts...)
+	cursor, err := r.Collection().Find(r.config.Context, find, opts...)
 	if err != nil {
 		log.Printf("Find error: %s", err.Error())
 		return nil
@@ -157,64 +116,188 @@ func (r *Repository[T]) Find(query bson.M, opts ...*options.FindOptions) []*T {
 	return entities
 }
 
-// Create inserts a new entity into the MongoDB Collection.
-// The method automatically sets the ID and CreatedAt fields if they are present in the entity.
-//
-// Parameters:
-//   - entity: A pointer to the entity of type `T` to be inserted.
-//
-// Returns:
-//   - An error if the insertion fails.
 func (r *Repository[T]) Create(entity *T) error {
-	er := NewEntityReflection(r.config, entity)
-	er.SetNewID()
-
-	// only update CreatedAtField if is configured
-	if r.config.CreatedAtField != "" {
-		er.SetCreatedAt()
+	if validateErr := r.validate(entity); validateErr != nil {
+		return validateErr
 	}
 
-	_, err := r.Collection().InsertOne(r.config.Context, entity)
+	// Parse the entity to BSON data
+	data := r.parseEntity(entity)
+
+	// Generate new ObjectId and set the "created_at" field
+	newId := primitive.NewObjectID()
+	data["_id"] = newId
+	data["created_at"] = time.Now()
+
+	// Create an options.FindOneAndUpdateOptions struct
+	opts := options.FindOneAndUpdate().
+		SetReturnDocument(1). // Directly set options.After here
+		SetUpsert(true)       // Set upsert to true, meaning insert if not found
+
+	// Insert and return the inserted document, or update if it already exists
+	var result T
+	err := r.Collection().FindOneAndUpdate(
+		r.config.Context,
+		bson.M{"_id": newId}, // Match condition (insert or update if matching ID)
+		bson.M{"$set": data}, // Set fields
+		opts,
+	).Decode(&result)
+
+	if err != nil {
+		return err
+	}
+
+	// Update the original entity with the values from the inserted/updated document
+	*entity = result
+
+	return nil
+}
+
+func (r *Repository[T]) Update(id string, entity *T) error {
+	if validateErr := r.validate(entity); validateErr != nil {
+		return validateErr
+	}
+
+	// Prepare Data
+	data := r.parseEntity(entity)
+	data["updated_at"] = time.Now().UTC()
+	delete(data, "_id")
+
+	opts := options.FindOneAndUpdate().SetReturnDocument(1) // Return updated document
+
+	var updatedEntity T
+
+	err := r.Collection().FindOneAndUpdate(
+		r.config.Context,
+		bson.M{"_id": r.createObjectId(id)},
+		bson.M{"$set": data},
+		opts,
+	).Decode(&updatedEntity)
+
+	if err != nil {
+		log.Printf("Update error: %s", err.Error())
+		return nil
+	}
+
+	// Update the original entity with the values from the inserted/updated document
+	*entity = updatedEntity
+
+	return nil
+}
+
+func (r *Repository[T]) Delete(id string, soft bool) error {
+	if soft {
+		err := r.Collection().FindOneAndUpdate(
+			r.config.Context,
+			bson.M{"_id": r.createObjectId(id)},
+			bson.M{"$set": bson.M{"deleted_at": time.Now()}},
+		)
+		return err.Err()
+	}
+
+	_, err := r.Collection().DeleteOne(r.config.Context, bson.M{"_id": r.createObjectId(id)})
 	return err
 }
 
-// Update modifies an existing entity in the MongoDB Collection.
-// The method automatically sets the UpdatedAt field to the current time before performing the update.
-//
-// Parameters:
-//   - entity: A pointer to the entity of type `T` with updated data.
-//
-// Returns:
-//   - An error if the update operation fails.
-func (r *Repository[T]) Update(entity *T) error {
-	er := NewEntityReflection(r.config, entity)
+func (r *Repository[T]) validate(entity *T) error {
+	validate := validator.New()
 
-	// only update UpdatedAtField if is configured
-	if r.config.UpdatedAtField != "" {
-		er.SetUpdateAt()
+	// Perform the validation
+	validateErr := validate.Struct(entity)
+
+	if validateErr != nil {
+		// Map of field names to slices of validation errors
+		errorMap := map[string][]string{}
+
+		// Convert validation errors to map
+		if validationErrors, ok := validateErr.(validator.ValidationErrors); ok {
+			for _, ve := range validationErrors {
+				// Add each error to the map under the appropriate field
+				fieldName := ve.Field()
+				errorMessage := ve.Tag() // Or you can get more info like ve.ActualTag(), etc.
+
+				// Append error message to the map entry
+				errorMap[fieldName] = append(errorMap[fieldName], errorMessage)
+			}
+		}
+
+		errorsJson, _ := json.Marshal(map[string]map[string][]string{
+			"errors": errorMap,
+		})
+
+		return errors.New(string(errorsJson))
 	}
 
-	_, err := r.Collection().UpdateByID(r.config.Context, er.GetID(), bson.M{"$set": entity})
-	return err
+	// Return nil if no validation errors
+	return nil
 }
 
-// Delete removes an entity from the MongoDB Collection.
-// If the configuration supports soft deletes, it sets the DeletedAt field instead of permanently deleting the document.
-//
-// Parameters:
-//   - entity: A pointer to the entity of type `T` to be deleted.
-//
-// Returns:
-//   - An error if the deletion fails.
-func (r *Repository[T]) Delete(entity *T) error {
-	er := NewEntityReflection(r.config, entity)
-
-	// make update with timestamp over DeletedAtField if is set
-	if r.config.DeletedAtField != "" {
-		er.SetDeletedAt()
-		return r.Update(entity)
+func (r *Repository[T]) createObjectId(id string) *primitive.ObjectID {
+	objectID, err := primitive.ObjectIDFromHex(id)
+	if err != nil {
+		log.Printf("FindByHexId error: %s", err.Error())
+		return nil
 	}
 
-	_, err := r.Collection().DeleteOne(r.config.Context, bson.M{"_id": er.GetID()})
-	return err
+	return &objectID
+}
+
+func (r *Repository[T]) parseEntity(obj any) bson.M {
+	val := reflect.ValueOf(obj)
+	typ := val.Type()
+	result := bson.M{}
+
+	// Check if the object is a pointer, and get the underlying value if so
+	if typ.Kind() == reflect.Ptr {
+		val = val.Elem()
+		typ = val.Type()
+	}
+
+	// Iterate over struct fields
+	for i := range val.NumField() {
+		fieldVal := val.Field(i)
+		fieldType := typ.Field(i)
+		bsonTag := fieldType.Tag.Get("bson")
+
+		// Skip fields with no bson tag or with a "-" tag (meaning ignore this field)
+		if bsonTag == "" || bsonTag == "-" {
+			continue
+		}
+
+		tags := strings.Split(bsonTag, ",")
+		tag := tags[0]
+
+		// Skip zero time.Time and ObjectID values
+		if fieldVal.Kind() == reflect.Struct {
+			if fieldVal.Type() == reflect.TypeOf(time.Time{}) && fieldVal.IsZero() {
+				continue // Skip zero time values
+			} else if fieldVal.Type() == reflect.TypeOf(primitive.ObjectID{}) && fieldVal.IsZero() {
+				continue // Skip zero ObjectID values
+			} else {
+				// Process nested structs recursively
+				subMap := r.parseEntity(fieldVal.Interface())
+				if len(subMap) > 0 {
+					result[tag] = subMap
+				}
+			}
+		} else if (fieldVal.Kind() == reflect.Bool && !fieldVal.Bool()) || r.isNumeric(fieldVal.Kind()) {
+			// keep false or 0 values as valuefull
+			result[tag] = fieldVal.Interface()
+		} else if !fieldVal.IsZero() { // Only add non-zero fields to the BSON map
+			// Handle case where a field's bson tag might have multiple names separated by commas
+			result[tag] = fieldVal.Interface()
+		}
+	}
+
+	return result
+}
+
+func (r *Repository[T]) isNumeric(kind reflect.Kind) bool {
+	switch kind {
+	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64,
+		reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64,
+		reflect.Float32, reflect.Float64:
+		return true
+	}
+	return false
 }

@@ -2,7 +2,6 @@ package mongorepo
 
 import (
 	"go.mongodb.org/mongo-driver/bson"
-	"go.mongodb.org/mongo-driver/bson/primitive"
 	"go.mongodb.org/mongo-driver/mongo"
 	"go.mongodb.org/mongo-driver/mongo/options"
 )
@@ -41,17 +40,7 @@ type IRepository[T any] interface {
 	// Returns:
 	//   - A slice of pointers to entities of type `T` that match the criteria.
 	//   - An error if the operation fails.
-	FindByHexId(id string) *T
-
-	// FindById retrieves a single entity by its unique MongoDB ObjectID.
-	//
-	// Parameters:
-	//   - id: The ObjectID of the entity to retrieve.
-	//
-	// Returns:
-	//   - A pointer to the entity of type `T`, or nil if not found.
-	//   - An error if the operation fails.
-	FindById(id primitive.ObjectID) *T
+	FindById(id string) *T
 
 	// FindOne executes a query to retrieve a single entity matching the provided search criteria.
 	//
