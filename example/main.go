@@ -1,14 +1,11 @@
 package main
 
 import (
-	"context"
 	"fmt"
 	"time"
 
 	"github.com/eliasnoya/mongorepo"
 	"go.mongodb.org/mongo-driver/bson/primitive"
-	"go.mongodb.org/mongo-driver/mongo"
-	"go.mongodb.org/mongo-driver/mongo/options"
 )
 
 type MongoEntity struct {
@@ -40,10 +37,14 @@ type M = map[string]any
 
 func main() {
 
-	client, err := mongo.Connect(context.Background(), options.Client().ApplyURI("mongodb://localhost:27017/"))
-	if err != nil {
-		panic("failed to connect mongo db")
-	}
+	// NewClient initializes and returns a *mongo.Client instance for connecting to MongoDB.
+	//
+	// If the connection fails, the function will panic.
+	//
+	// Parameters:
+	// - uri (string): The MongoDB connection URI.
+	// - ctx (optional, context.Context): A custom context for the connection. If not provided, `context.Background()` is used.
+	client := mongorepo.NewClient("mongodb://localhost:27018/")
 
 	repo := mongorepo.New[EntityTest](&mongorepo.Config{
 		Client:     client,
@@ -58,6 +59,12 @@ func main() {
 	createErr := repo.Create(entity)
 
 	if createErr != nil {
+		fmt.Println(createErr.Error())
+	}
+
+	// Change DB on the fly
+	createOtherDbErr := repo.SetDatabase("tenant_2").Create(entity)
+	if createOtherDbErr != nil {
 		fmt.Println(createErr.Error())
 	}
 
